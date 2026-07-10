@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Painel de Postagem — Notícias</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg: #08060F;
+    --bg-card: #120E1F;
+    --border: #241E38;
+    --violet: #8B5CF6;
+    --pink: #EC4899;
+    --text: #F1EEFA;
+    --text-dim: #948FAA;
+    --success: #34D399;
+    --error: #F87171;
+    --pending: #FBBF24;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    margin: 0;
+    padding: 32px 20px 80px;
+  }
+  h1 {
+    font-family: 'Sora', sans-serif;
+    font-size: 22px;
+    margin: 0 0 4px;
+    background: linear-gradient(90deg, var(--violet), var(--pink));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    display: inline-block;
+  }
+  .subtitle { color: var(--text-dim); font-size: 13px; margin-bottom: 28px; }
+  .container { max-width: 720px; margin: 0 auto; }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .card h2 {
+    font-family: 'Sora', sans-serif;
+    font-size: 15px;
+    margin: 0 0 14px;
+    font-weight: 600;
+  }
+  label { font-size: 12px; color: var(--text-dim); display: block; margin-bottom: 6px; }
+  input[type="text"], input[type="url"], textarea {
+    width: 100%;
+    background: #0D0A18;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    margin-bottom: 14px;
+  }
+  textarea { resize: vertical; min-height: 60px; }
+  button {
+    background: linear-gradient(90deg, var(--violet), var(--pink));
+    border: none;
+    color: white;
+    font-weight: 600;
+    font-size: 13px;
+    padding: 10px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  button.secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .preview { display: flex; gap: 14px; margin-bottom: 14px; }
+  .preview img { width: 100px; height: 100px; object-fit: cover; border-radius: 8px; background: #0D0A18; }
+  .char-count { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-dim); margin: -8px 0 14px; }
+  .pages-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 16px; }
+  .page-chip {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+  .page-chip.selected { border-color: var(--violet); background: rgba(139,92,246,0.1); }
+  .page-chip input { margin: 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+  th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: uppercase; }
+  .status { font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 3px 8px; border-radius: 6px; }
+  .status.sucesso { background: rgba(52,211,153,0.15); color: var(--success); }
+  .status.erro { background: rgba(248,113,113,0.15); color: var(--error); }
+  .status.pendente { background: rgba(251,191,36,0.15); color: var(--pending); }
+  .row-actions { display: flex; gap: 8px; align-items: center; }
+  .msg { font-size: 12px; margin-top: 8px; }
+  .msg.error { color: var(--error); }
+  .msg.success { color: var(--success); }
+  .link-cell { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .toggle-manage { color: var(--text-dim); font-size: 12px; cursor: pointer; text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Painel de Postagem</h1>
+  <div class="subtitle">Cole o link, escolha as páginas, poste. O comentário com o link é automático.</div>
+
+  <!-- POSTAR NOVA MATÉRIA -->
+  <div class="card">
+    <h2>Nova matéria</h2>
+    <label for="link-input">Link da notícia</label>
+    <input type="url" id="link-input" placeholder="https://..." />
+    <button id="btn-preview" class="secondary">Buscar preview</button>
+
+    <div id="preview-area" style="margin-top:16px; display:none;">
+      <div class="preview">
+        <img id="preview-img" src="" alt="preview" />
+        <div style="flex:1;">
+          <label for="titulo-input">Título (editável)</label>
+          <textarea id="titulo-input"></textarea>
+          <div class="char-count" id="char-count"></div>
+        </div>
+      </div>
+
+      <label>Páginas</label>
+      <div class="pages-grid" id="pages-grid"></div>
+
+      <button id="btn-postar">Postar nas páginas selecionadas</button>
+      <div id="post-msg" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- HISTÓRICO -->
+  <div class="card">
+    <h2>Histórico</h2>
+    <table>
+      <thead>
+        <tr><th>Data</th><th>Link</th><th>Título</th><th>Páginas</th><th>Status</th></tr>
+      </thead>
+      <tbody id="historico-body"></tbody>
+    </table>
+  </div>
+
+  <!-- GERENCIAR PÁGINAS -->
+  <div class="card">
+    <h2>Páginas cadastradas <span class="toggle-manage" id="toggle-manage">gerenciar</span></h2>
+    <div id="manage-area" style="display:none;">
+      <div style="display:flex; gap:8px; margin-bottom:14px;">
+        <input type="text" id="nova-pagina-nome" placeholder="Nome da página" style="margin-bottom:0;" />
+        <input type="text" id="nova-pagina-id" placeholder="page_id (como está no Make)" style="margin-bottom:0;" />
+        <button id="btn-add-pagina" style="white-space:nowrap;">Adicionar</button>
+      </div>
+      <table>
+        <thead><tr><th>Nome</th><th>Page ID</th><th>Ativa</th><th></th></tr></thead>
+        <tbody id="paginas-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ====== CONFIGURAÇÃO — preencha com os dados do seu projeto Supabase ======
+  const SUPABASE_URL = 'https://unrsmsmubcfriaphjlit.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVucnNtc211YmNmcmlhcGhqbGl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MzU4ODksImV4cCI6MjA5OTIxMTg4OX0.WgI9LR0_-ufl1y2oPY4jQp1UuSOqV8iBmO4a_6P0LdE';
+  // ============================================================================
+  // Não precisa de webhook do Make aqui — o botão "Postar" chama /api/postar,
+  // que fala direto com a Graph API do Facebook.
+
+  const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  let paginasCache = [];
+  let selecionadas = new Set();
+
+  const linkInput = document.getElementById('link-input');
+  const previewArea = document.getElementById('preview-area');
+  const previewImg = document.getElementById('preview-img');
+  const tituloInput = document.getElementById('titulo-input');
+  const charCount = document.getElementById('char-count');
+  const pagesGrid = document.getElementById('pages-grid');
+  const postMsg = document.getElementById('post-msg');
+
+  function truncar(titulo, limite = 60) {
+    if (!titulo) return '';
+    if (titulo.length <= limite) return titulo;
+    return titulo.slice(0, limite).trim() + '...Ver mais';
+  }
+
+  function atualizarContador() {
+    charCount.textContent = `${tituloInput.value.length} caracteres`;
+  }
+  tituloInput.addEventListener('input', atualizarContador);
+
+  async function carregarPaginas() {
+    const { data, error } = await supa.from('paginas_facebook').select('*').order('nome');
+    if (error) { console.error(error); return; }
+    paginasCache = data || [];
+    renderPagesGrid();
+    renderPaginasTabela();
+  }
+
+  function renderPagesGrid() {
+    pagesGrid.innerHTML = '';
+    paginasCache.filter(p => p.ativo).forEach(p => {
+      const chip = document.createElement('label');
+      chip.className = 'page-chip selected';
+      chip.innerHTML = `<input type="checkbox" checked data-id="${p.id}" data-pageid="${p.page_id}" /> ${p.nome}`;
+      selecionadas.add(p.page_id);
+      chip.querySelector('input').addEventListener('change', (e) => {
+        chip.classList.toggle('selected', e.target.checked);
+        if (e.target.checked) selecionadas.add(p.page_id);
+        else selecionadas.delete(p.page_id);
+      });
+      pagesGrid.appendChild(chip);
+    });
+  }
+
+  document.getElementById('btn-preview').addEventListener('click', async () => {
+    const url = linkInput.value.trim();
+    if (!url) return;
+    postMsg.textContent = '';
+    const btn = document.getElementById('btn-preview');
+    btn.disabled = true; btn.textContent = 'Buscando...';
+    try {
+      const res = await fetch(`/api/preview?url=${encodeURIComponent(url)}`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      previewImg.src = data.imagem_url || '';
+      tituloInput.value = data.titulo_truncado || truncar(data.titulo_original || '');
+      atualizarContador();
+      previewArea.style.display = 'block';
+    } catch (err) {
+      postMsg.textContent = 'Erro ao buscar preview: ' + err.message;
+      postMsg.className = 'msg error';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Buscar preview';
+    }
+  });
+
+  document.getElementById('btn-postar').addEventListener('click', async () => {
+    const link = linkInput.value.trim();
+    const titulo = tituloInput.value.trim();
+    const imagem = previewImg.src;
+    const paginas = Array.from(selecionadas);
+
+    if (!link || !titulo || paginas.length === 0) {
+      postMsg.textContent = 'Preencha o link, o título e selecione ao menos uma página.';
+      postMsg.className = 'msg error';
+      return;
+    }
+
+    const btn = document.getElementById('btn-postar');
+    btn.disabled = true; btn.textContent = 'Postando...';
+    postMsg.textContent = '';
+
+    try {
+      const apiRes = await fetch('/api/postar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ link, titulo, imagem_url: imagem, paginas }),
+      });
+      const data = await apiRes.json();
+      if (!apiRes.ok) throw new Error(data.error || 'Erro desconhecido');
+
+      const erros = (data.resultados || []).filter(r => r.status === 'erro');
+      if (erros.length === 0) {
+        postMsg.textContent = 'Postado com sucesso em todas as páginas!';
+        postMsg.className = 'msg success';
+        linkInput.value = '';
+        tituloInput.value = '';
+        previewImg.src = '';
+        previewArea.style.display = 'none';
+      } else if (erros.length === data.resultados.length) {
+        postMsg.textContent = 'Falhou em todas as páginas. Confira o histórico para detalhes.';
+        postMsg.className = 'msg error';
+      } else {
+        postMsg.textContent = `Postado com sucesso, mas falhou em ${erros.length} página(s). Confira o histórico.`;
+        postMsg.className = 'msg error';
+      }
+      carregarHistorico();
+    } catch (err) {
+      postMsg.textContent = 'Erro ao postar: ' + err.message;
+      postMsg.className = 'msg error';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Postar nas páginas selecionadas';
+    }
+  });
+
+  async function carregarHistorico() {
+    const { data, error } = await supa
+      .from('materias_postadas')
+      .select('*')
+      .order('criado_em', { ascending: false })
+      .limit(30);
+    if (error) { console.error(error); return; }
+
+    const tbody = document.getElementById('historico-body');
+    tbody.innerHTML = '';
+    (data || []).forEach(m => {
+      const nomesPaginas = (m.paginas || [])
+        .map(pid => paginasCache.find(p => p.page_id === pid)?.nome || pid)
+        .join(', ');
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${new Date(m.criado_em).toLocaleString('pt-BR')}</td>
+        <td class="link-cell"><a href="${m.link}" target="_blank" style="color:inherit;">${m.link}</a></td>
+        <td>${m.titulo_truncado || ''}</td>
+        <td>${nomesPaginas}</td>
+        <td><span class="status ${m.status}">${m.status}</span></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // ====== Gerenciar páginas ======
+  document.getElementById('toggle-manage').addEventListener('click', () => {
+    const area = document.getElementById('manage-area');
+    area.style.display = area.style.display === 'none' ? 'block' : 'none';
+  });
+
+  function renderPaginasTabela() {
+    const tbody = document.getElementById('paginas-body');
+    tbody.innerHTML = '';
+    paginasCache.forEach(p => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${p.nome}</td>
+        <td style="font-family:'JetBrains Mono',monospace; font-size:12px;">${p.page_id}</td>
+        <td>${p.ativo ? 'sim' : 'não'}</td>
+        <td class="row-actions">
+          <button class="secondary" data-action="toggle" data-id="${p.id}" data-ativo="${p.ativo}">${p.ativo ? 'Desativar' : 'Ativar'}</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    tbody.querySelectorAll('button[data-action="toggle"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const ativo = btn.dataset.ativo === 'true';
+        await supa.from('paginas_facebook').update({ ativo: !ativo }).eq('id', id);
+        carregarPaginas();
+      });
+    });
+  }
+
+  document.getElementById('btn-add-pagina').addEventListener('click', async () => {
+    const nome = document.getElementById('nova-pagina-nome').value.trim();
+    const pageId = document.getElementById('nova-pagina-id').value.trim();
+    if (!nome || !pageId) return;
+    await supa.from('paginas_facebook').insert({ nome, page_id: pageId });
+    document.getElementById('nova-pagina-nome').value = '';
+    document.getElementById('nova-pagina-id').value = '';
+    carregarPaginas();
+  });
+
+  // init
+  carregarPaginas().then(carregarHistorico);
+</script>
+</body>
+</html>
