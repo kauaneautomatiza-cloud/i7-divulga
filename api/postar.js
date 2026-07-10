@@ -4,6 +4,7 @@
 // Chama a Graph API direto — sem Make, sem limite de operações pagas.
 
 import { createClient } from '@supabase/supabase-js';
+import { stamparImagem } from './_lib/stamp.js';
 
 const GRAPH_VERSION = 'v23.0';
 
@@ -13,17 +14,14 @@ const supa = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-async function postarFoto(pageId, token, imagemUrl, legenda) {
+async function postarFoto(pageId, token, imagemBuffer, legenda) {
   const url = `https://graph.facebook.com/${GRAPH_VERSION}/${pageId}/photos`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      url: imagemUrl,
-      caption: legenda,
-      access_token: token,
-    }),
-  });
+  const formData = new FormData();
+  formData.append('caption', legenda);
+  formData.append('access_token', token);
+  formData.append('source', new Blob([imagemBuffer], { type: 'image/jpeg' }), 'post.jpg');
+
+  const res = await fetch(url, { method: 'POST', body: formData });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error?.message || 'Erro ao postar foto');
   // a resposta do endpoint /photos traz post_id (o ID do post no feed, não da foto isolada)
@@ -54,6 +52,13 @@ export default async function handler(req, res) {
 
   const resultados = [];
 
+  let imagemCarimbada;
+  try {
+    imagemCarimbada = await stamparImagem(imagem_url);
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao gerar a imagem com o selo.', detalhe: String(err.message || err) });
+  }
+
   for (const pageId of paginas) {
     try {
       const { data: tokenRow, error: tokenErr } = await supa
@@ -64,7 +69,7 @@ export default async function handler(req, res) {
 
       if (tokenErr || !tokenRow) throw new Error('Token não encontrado para esta página.');
 
-      const postId = await postarFoto(pageId, tokenRow.access_token, imagem_url, titulo);
+      const postId = await postarFoto(pageId, tokenRow.access_token, imagemCarimbada, titulo);
       await comentarLink(postId, tokenRow.access_token, link);
 
       resultados.push({ page_id: pageId, status: 'sucesso' });
