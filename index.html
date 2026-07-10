@@ -259,19 +259,21 @@ document.getElementById('toggle-paginas').addEventListener('click', () => {
   }
 
   let imagemCarimbadaBase64 = '';
+let tituloOriginalAtual = '';
 
-  document.getElementById('btn-preview').addEventListener('click', async () => {
-    const url = linkInput.value.trim();
-    if (!url) return;
-    postMsg.textContent = '';
-    const btn = document.getElementById('btn-preview');
-    btn.disabled = true; btn.textContent = 'Buscando...';
-    try {
-      const res = await fetch(`/api/preview?url=${encodeURIComponent(url)}`);
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      tituloInput.value = data.titulo_truncado || truncar(data.titulo_original || '');
-      atualizarContador();
+document.getElementById('btn-preview').addEventListener('click', async () => {
+  const url = linkInput.value.trim();
+  if (!url) return;
+  postMsg.textContent = '';
+  const btn = document.getElementById('btn-preview');
+  btn.disabled = true; btn.textContent = 'Buscando...';
+  try {
+    const res = await fetch(`/api/preview?url=${encodeURIComponent(url)}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    tituloOriginalAtual = data.titulo_original || '';
+    tituloInput.value = data.titulo_truncado || truncar(tituloOriginalAtual);
+    atualizarContador();
 
       if (data.imagem_url) {
         btn.textContent = 'Aplicando selo...';
@@ -293,16 +295,30 @@ document.getElementById('toggle-paginas').addEventListener('click', () => {
     }
   });
 
-  document.getElementById('btn-postar').addEventListener('click', async () => {
-    const link = linkInput.value.trim();
-    const titulo = tituloInput.value.trim();
-    const paginas = Array.from(selecionadas);
+  function tituloBaseSemSufixo(titulo) {
+  return titulo.replace(/\.\.\.Ver mais$/, '').trim();
+}
 
-    if (!link || !titulo || paginas.length === 0 || !imagemCarimbadaBase64) {
-      postMsg.textContent = 'Preencha o link, busque o preview e selecione ao menos uma página.';
-      postMsg.className = 'msg error';
-      return;
-    }
+function tituloVariado(tituloBase) {
+  const limite = 55 + Math.floor(Math.random() * 11); // varia entre 55 e 65
+  return truncar(tituloBase, limite);
+}
+
+function aguardar(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+document.getElementById('btn-postar').addEventListener('click', async () => {
+  const link = linkInput.value.trim();
+  const tituloDigitado = tituloInput.value.trim();
+  const tituloBase = tituloOriginalAtual ? tituloBaseSemSufixo(tituloOriginalAtual) : tituloBaseSemSufixo(tituloDigitado);
+  const paginas = Array.from(selecionadas);
+
+  if (!link || !tituloDigitado || paginas.length === 0 || !imagemCarimbadaBase64) {
+    postMsg.textContent = 'Preencha o link, busque o preview e selecione ao menos uma página.';
+    postMsg.className = 'msg error';
+    return;
+  }
 
     const btn = document.getElementById('btn-postar');
     btn.disabled = true;
@@ -323,6 +339,15 @@ document.getElementById('toggle-paginas').addEventListener('click', () => {
     const resultados = [];
     for (let i = 0; i < paginas.length; i++) {
       const pageId = paginas[i];
+
+      if (i > 0) {
+        const esperaMs = 3000 + Math.floor(Math.random() * 6000); // 3 a 9 segundos
+        linhaPorPagina[pageId].textContent = 'aguardando';
+        btn.textContent = `Aguardando intervalo... (${i + 1}/${paginas.length})`;
+        await aguardar(esperaMs);
+      }
+
+      const tituloDaPagina = tituloVariado(tituloBase) || tituloDigitado;
       btn.textContent = `Postando... (${i + 1}/${paginas.length})`;
       linhaPorPagina[pageId].textContent = 'postando';
 
@@ -330,7 +355,7 @@ document.getElementById('toggle-paginas').addEventListener('click', () => {
         const apiRes = await fetch('/api/postar-pagina', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ page_id: pageId, titulo, link, imagem_base64: imagemCarimbadaBase64 }),
+          body: JSON.stringify({ page_id: pageId, titulo: tituloDaPagina, link, imagem_base64: imagemCarimbadaBase64 }),
         });
         const data = await apiRes.json();
         const status = data.status === 'sucesso' ? 'sucesso' : 'erro';
@@ -349,7 +374,7 @@ document.getElementById('toggle-paginas').addEventListener('click', () => {
 
     await supa.from('materias_postadas').insert({
       link,
-      titulo_truncado: titulo,
+      titulo_truncado: tituloDigitado,
       paginas,
       status: statusGeral,
       detalhe_erro: erros.length ? JSON.stringify(erros) : null,
@@ -360,6 +385,7 @@ document.getElementById('toggle-paginas').addEventListener('click', () => {
       postMsg.className = 'msg success';
       linkInput.value = '';
       tituloInput.value = '';
+      tituloOriginalAtual = '';
       previewImg.src = '';
       imagemCarimbadaBase64 = '';
       previewArea.style.display = 'none';
