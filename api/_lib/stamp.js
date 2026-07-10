@@ -22,7 +22,8 @@ const arrayBuffer = fontBuffer.buffer.slice(
 const fonte = opentype.parse(arrayBuffer);
 
 const TEXTO_SELO = 'LEIA MAIS NOS COMENTÁRIOS';
-const ALTURA_FAIXA_PROPORCAO = 0.2; // faixa um pouco mais alta pra caber texto + seta
+const TAMANHO_FINAL = 1080; // Facebook recomenda 1080x1080 para posts quadrados
+const ALTURA_FAIXA = 170; // altura fixa da faixa do selo, dentro do quadro de 1080
 const COR_FAIXA = { r: 0x12, g: 0x0e, b: 0x1f, alpha: 1 }; // roxo escuro, combina com a identidade visual
 
 // Gera o "d" (path data) do texto inteiro, glifo por glifo, sem depender de
@@ -45,14 +46,18 @@ export async function stamparImagem(imagemUrl) {
   const bufferOriginal = Buffer.from(await resposta.arrayBuffer());
 
   const fotoSharp = sharp(bufferOriginal);
-  const metadata = await fotoSharp.metadata();
-  const largura = metadata.width;
-  const alturaOriginal = metadata.height;
-  const alturaFaixa = Math.round(alturaOriginal * ALTURA_FAIXA_PROPORCAO);
-  const alturaFinal = alturaOriginal + alturaFaixa;
+  const alturaFoto = TAMANHO_FINAL - ALTURA_FAIXA;
 
-  // normaliza a foto original pra JPEG (resolve WebP, AVIF, PNG, o que vier)
-  const fotoNormalizada = await fotoSharp.jpeg().toBuffer();
+  // recorta/redimensiona a foto original pra preencher exatamente o espaço acima da faixa
+  const fotoNormalizada = await fotoSharp
+    .resize(TAMANHO_FINAL, alturaFoto, { fit: 'cover', position: 'centre' })
+    .jpeg()
+    .toBuffer();
+
+  const largura = TAMANHO_FINAL;
+  const alturaOriginal = alturaFoto;
+  const alturaFaixa = ALTURA_FAIXA;
+  const alturaFinal = TAMANHO_FINAL;
 
   const fontSize = Math.round(alturaFaixa * 0.24);
   const centroX = largura / 2;
