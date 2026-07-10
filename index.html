@@ -136,8 +136,13 @@
         </div>
       </div>
 
-      <label>Páginas <span class="toggle-manage" id="btn-selecionar-todas">selecionar todas</span></label>
-      <div class="pages-grid" id="pages-grid"></div>
+      <label>Páginas
+  <span class="toggle-manage" id="btn-selecionar-todas">selecionar todas</span> ·
+  <span class="toggle-manage" id="toggle-paginas">ocultar</span>
+</label>
+<div id="paginas-grid-area">
+  <div class="pages-grid" id="pages-grid"></div>
+</div>
 
       <button id="btn-postar">Postar nas páginas selecionadas</button>
       <div id="post-msg" class="msg"></div>
@@ -239,7 +244,12 @@
       cb.dispatchEvent(new Event('change'));
     });
   });
-
+document.getElementById('toggle-paginas').addEventListener('click', () => {
+  const area = document.getElementById('paginas-grid-area');
+  const aberto = area.style.display !== 'none';
+  area.style.display = aberto ? 'none' : 'block';
+  document.getElementById('toggle-paginas').textContent = aberto ? 'mostrar' : 'ocultar';
+});
   async function blobParaBase64(blob) {
     const buffer = await blob.arrayBuffer();
     let binario = '';
