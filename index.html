@@ -111,6 +111,7 @@
   .msg.success { color: var(--success); }
   .link-cell { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .toggle-manage { color: var(--text-dim); font-size: 12px; cursor: pointer; text-decoration: underline; }
+  .progresso-item { display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; }
 </style>
 </head>
 <body>
@@ -128,7 +129,6 @@
     <div id="preview-area" style="margin-top:16px; display:none;">
       <div class="preview">
         <img id="preview-img" src="" alt="preview" />
-        <input type="hidden" id="imagem-original" value="" />
         <div style="flex:1;">
           <label for="titulo-input">Título (editável)</label>
           <textarea id="titulo-input"></textarea>
@@ -136,23 +136,26 @@
         </div>
       </div>
 
-      <label>Páginas</label>
+      <label>Páginas <span class="toggle-manage" id="btn-selecionar-todas">selecionar todas</span></label>
       <div class="pages-grid" id="pages-grid"></div>
 
       <button id="btn-postar">Postar nas páginas selecionadas</button>
       <div id="post-msg" class="msg"></div>
+      <div id="progresso-lista" style="margin-top:12px; display:flex; flex-direction:column; gap:6px;"></div>
     </div>
   </div>
 
   <!-- HISTÓRICO -->
   <div class="card">
-    <h2>Histórico</h2>
-    <table>
-      <thead>
-        <tr><th>Data</th><th>Link</th><th>Título</th><th>Páginas</th><th>Status</th></tr>
-      </thead>
-      <tbody id="historico-body"></tbody>
-    </table>
+    <h2>Histórico <span class="toggle-manage" id="toggle-historico">mostrar</span></h2>
+    <div id="historico-area" style="display:none;">
+      <table>
+        <thead>
+          <tr><th>Data</th><th>Link</th><th>Título</th><th>Páginas</th><th>Status</th></tr>
+        </thead>
+        <tbody id="historico-body"></tbody>
+      </table>
+    </div>
   </div>
 
   <!-- GERENCIAR PÁGINAS -->
@@ -228,6 +231,25 @@
     });
   }
 
+  document.getElementById('btn-selecionar-todas').addEventListener('click', () => {
+    const checkboxes = pagesGrid.querySelectorAll('input[type="checkbox"]');
+    const todasMarcadas = Array.from(checkboxes).every(cb => cb.checked);
+    checkboxes.forEach(cb => {
+      cb.checked = !todasMarcadas;
+      cb.dispatchEvent(new Event('change'));
+    });
+  });
+
+  async function blobParaBase64(blob) {
+    const buffer = await blob.arrayBuffer();
+    let binario = '';
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.byteLength; i++) binario += String.fromCharCode(bytes[i]);
+    return btoa(binario);
+  }
+
+  let imagemCarimbadaBase64 = '';
+
   document.getElementById('btn-preview').addEventListener('click', async () => {
     const url = linkInput.value.trim();
     if (!url) return;
@@ -238,10 +260,20 @@
       const res = await fetch(`/api/preview?url=${encodeURIComponent(url)}`);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      document.getElementById('imagem-original').value = data.imagem_url || '';
-      previewImg.src = data.imagem_url ? `/api/preview-stamp?url=${encodeURIComponent(data.imagem_url)}` : '';
       tituloInput.value = data.titulo_truncado || truncar(data.titulo_original || '');
       atualizarContador();
+
+      if (data.imagem_url) {
+        btn.textContent = 'Aplicando selo...';
+        const stampRes = await fetch(`/api/preview-stamp?url=${encodeURIComponent(data.imagem_url)}`);
+        if (!stampRes.ok) throw new Error('Não consegui gerar a imagem com o selo.');
+        const blob = await stampRes.blob();
+        previewImg.src = URL.createObjectURL(blob);
+        imagemCarimbadaBase64 = await blobParaBase64(blob);
+      } else {
+        previewImg.src = '';
+        imagemCarimbadaBase64 = '';
+      }
       previewArea.style.display = 'block';
     } catch (err) {
       postMsg.textContent = 'Erro ao buscar preview: ' + err.message;
@@ -254,51 +286,84 @@
   document.getElementById('btn-postar').addEventListener('click', async () => {
     const link = linkInput.value.trim();
     const titulo = tituloInput.value.trim();
-    const imagem = document.getElementById('imagem-original').value;
     const paginas = Array.from(selecionadas);
 
-    if (!link || !titulo || paginas.length === 0) {
-      postMsg.textContent = 'Preencha o link, o título e selecione ao menos uma página.';
+    if (!link || !titulo || paginas.length === 0 || !imagemCarimbadaBase64) {
+      postMsg.textContent = 'Preencha o link, busque o preview e selecione ao menos uma página.';
       postMsg.className = 'msg error';
       return;
     }
 
     const btn = document.getElementById('btn-postar');
-    btn.disabled = true; btn.textContent = 'Postando...';
+    btn.disabled = true;
     postMsg.textContent = '';
 
-    try {
-      const apiRes = await fetch('/api/postar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ link, titulo, imagem_url: imagem, paginas }),
-      });
-      const data = await apiRes.json();
-      if (!apiRes.ok) throw new Error(data.error || 'Erro desconhecido');
+    const progressoLista = document.getElementById('progresso-lista');
+    progressoLista.innerHTML = '';
+    const linhaPorPagina = {};
+    paginas.forEach(pageId => {
+      const nome = paginasCache.find(p => p.page_id === pageId)?.nome || pageId;
+      const linha = document.createElement('div');
+      linha.className = 'progresso-item';
+      linha.innerHTML = `<span>${nome}</span><span class="status pendente">pendente</span>`;
+      progressoLista.appendChild(linha);
+      linhaPorPagina[pageId] = linha.querySelector('.status');
+    });
 
-      const erros = (data.resultados || []).filter(r => r.status === 'erro');
-      if (erros.length === 0) {
-        postMsg.textContent = 'Postado com sucesso em todas as páginas!';
-        postMsg.className = 'msg success';
-        linkInput.value = '';
-        tituloInput.value = '';
-        previewImg.src = '';
-        document.getElementById('imagem-original').value = '';
-        previewArea.style.display = 'none';
-      } else if (erros.length === data.resultados.length) {
-        postMsg.textContent = 'Falhou em todas as páginas. Confira o histórico para detalhes.';
-        postMsg.className = 'msg error';
-      } else {
-        postMsg.textContent = `Postado com sucesso, mas falhou em ${erros.length} página(s). Confira o histórico.`;
-        postMsg.className = 'msg error';
+    const resultados = [];
+    for (let i = 0; i < paginas.length; i++) {
+      const pageId = paginas[i];
+      btn.textContent = `Postando... (${i + 1}/${paginas.length})`;
+      linhaPorPagina[pageId].textContent = 'postando';
+
+      try {
+        const apiRes = await fetch('/api/postar-pagina', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ page_id: pageId, titulo, link, imagem_base64: imagemCarimbadaBase64 }),
+        });
+        const data = await apiRes.json();
+        const status = data.status === 'sucesso' ? 'sucesso' : 'erro';
+        linhaPorPagina[pageId].textContent = status;
+        linhaPorPagina[pageId].className = `status ${status}`;
+        resultados.push({ page_id: pageId, status, detalhe: data.detalhe });
+      } catch (err) {
+        linhaPorPagina[pageId].textContent = 'erro';
+        linhaPorPagina[pageId].className = 'status erro';
+        resultados.push({ page_id: pageId, status: 'erro', detalhe: String(err.message || err) });
       }
-      carregarHistorico();
-    } catch (err) {
-      postMsg.textContent = 'Erro ao postar: ' + err.message;
-      postMsg.className = 'msg error';
-    } finally {
-      btn.disabled = false; btn.textContent = 'Postar nas páginas selecionadas';
     }
+
+    const erros = resultados.filter(r => r.status === 'erro');
+    const statusGeral = erros.length === 0 ? 'sucesso' : (erros.length === resultados.length ? 'erro' : 'sucesso');
+
+    await supa.from('materias_postadas').insert({
+      link,
+      titulo_truncado: titulo,
+      paginas,
+      status: statusGeral,
+      detalhe_erro: erros.length ? JSON.stringify(erros) : null,
+    });
+
+    if (erros.length === 0) {
+      postMsg.textContent = 'Postado com sucesso em todas as páginas!';
+      postMsg.className = 'msg success';
+      linkInput.value = '';
+      tituloInput.value = '';
+      previewImg.src = '';
+      imagemCarimbadaBase64 = '';
+      previewArea.style.display = 'none';
+    } else if (erros.length === resultados.length) {
+      postMsg.textContent = 'Falhou em todas as páginas. Veja o status de cada uma acima.';
+      postMsg.className = 'msg error';
+    } else {
+      postMsg.textContent = `Postado com sucesso, mas falhou em ${erros.length} página(s). Veja o status de cada uma acima.`;
+      postMsg.className = 'msg error';
+    }
+    carregarHistorico();
+
+    btn.disabled = false;
+    btn.textContent = 'Postar nas páginas selecionadas';
   });
 
   async function carregarHistorico() {
@@ -326,6 +391,14 @@
       tbody.appendChild(tr);
     });
   }
+
+  // ====== Histórico recolhível ======
+  document.getElementById('toggle-historico').addEventListener('click', () => {
+    const area = document.getElementById('historico-area');
+    const aberto = area.style.display !== 'none';
+    area.style.display = aberto ? 'none' : 'block';
+    document.getElementById('toggle-historico').textContent = aberto ? 'mostrar' : 'ocultar';
+  });
 
   // ====== Gerenciar páginas ======
   document.getElementById('toggle-manage').addEventListener('click', () => {
