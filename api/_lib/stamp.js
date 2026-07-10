@@ -12,7 +12,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FONTE_BASE64 = fs
-  .readFileSync(path.join(__dirname, 'fonts', 'Inter-Bold.woff2'))
+  .readFileSync(path.join(__dirname, 'fonts', 'Inter-Bold.ttf'))
   .toString('base64');
 
 const TEXTO_SELO = 'LEIA MAIS NOS COMENTÁRIOS';
@@ -45,7 +45,7 @@ export async function stamparImagem(imagemUrl) {
       <style>
         @font-face {
           font-family: 'InterBold';
-          src: url(data:font/woff2;base64,${FONTE_BASE64}) format('woff2');
+          src: url(data:font/truetype;base64,${FONTE_BASE64}) format('truetype');
           font-weight: 700;
         }
         text {
