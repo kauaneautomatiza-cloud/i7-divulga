@@ -83,7 +83,7 @@
   }
   button:disabled { opacity: 0.5; cursor: not-allowed; }
   .preview { display: flex; gap: 14px; margin-bottom: 14px; }
-  .preview img { width: 100px; height: 100px; object-fit: cover; border-radius: 8px; background: #0D0A18; }
+  .preview img { width: 135px; height: 90px; object-fit: cover; border-radius: 8px; background: #0D0A18; }
   .char-count { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-dim); margin: -8px 0 14px; }
   .pages-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 16px; }
   .page-chip {
@@ -128,6 +128,7 @@
     <div id="preview-area" style="margin-top:16px; display:none;">
       <div class="preview">
         <img id="preview-img" src="" alt="preview" />
+        <input type="hidden" id="imagem-original" value="" />
         <div style="flex:1;">
           <label for="titulo-input">Título (editável)</label>
           <textarea id="titulo-input"></textarea>
@@ -237,7 +238,8 @@
       const res = await fetch(`/api/preview?url=${encodeURIComponent(url)}`);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      previewImg.src = data.imagem_url || '';
+      document.getElementById('imagem-original').value = data.imagem_url || '';
+      previewImg.src = data.imagem_url ? `/api/preview-stamp?url=${encodeURIComponent(data.imagem_url)}` : '';
       tituloInput.value = data.titulo_truncado || truncar(data.titulo_original || '');
       atualizarContador();
       previewArea.style.display = 'block';
@@ -252,7 +254,7 @@
   document.getElementById('btn-postar').addEventListener('click', async () => {
     const link = linkInput.value.trim();
     const titulo = tituloInput.value.trim();
-    const imagem = previewImg.src;
+    const imagem = document.getElementById('imagem-original').value;
     const paginas = Array.from(selecionadas);
 
     if (!link || !titulo || paginas.length === 0) {
@@ -281,6 +283,7 @@
         linkInput.value = '';
         tituloInput.value = '';
         previewImg.src = '';
+        document.getElementById('imagem-original').value = '';
         previewArea.style.display = 'none';
       } else if (erros.length === data.resultados.length) {
         postMsg.textContent = 'Falhou em todas as páginas. Confira o histórico para detalhes.';
