@@ -116,8 +116,13 @@
 </head>
 <body>
 <div class="container">
-  <h1>Painel de Postagem</h1>
-  <div class="subtitle">Cole o link, escolha as páginas, poste. O comentário com o link é automático.</div>
+  <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+    <div>
+      <h1>Painel de Postagem</h1>
+      <div class="subtitle">Cole o link, escolha as páginas, poste. O comentário com o link é automático.</div>
+    </div>
+    <span class="toggle-manage" id="btn-sair" style="margin-top:4px;">sair</span>
+  </div>
 
   <!-- POSTAR NOVA MATÉRIA -->
   <div class="card">
@@ -480,6 +485,11 @@
     document.getElementById('nova-pagina-nome').value = '';
     document.getElementById('nova-pagina-id').value = '';
     carregarPaginas();
+  });
+
+  document.getElementById('btn-sair').addEventListener('click', async () => {
+    await fetch('/api/logout', { method: 'POST' });
+    window.location.reload();
   });
 
   // init
